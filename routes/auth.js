@@ -5,16 +5,21 @@ const { body, validationResult } = require("express-validator");
 
 // this is for scure psw
 const bcrypt = require("bcryptjs");
+
 // this is for user authentication
 var jwt = require("jsonwebtoken");
-const { Router } = require("express");
+
+// Middleware for getting user data
+const userDetail = require("../middleware/userDetail");
 
 // SecretKey
 const JWT_SECRET = "FALLISBMATEEN19BSCS";
 
-// create a user using: 'POST' --> /api/auth/createuser. Doesn't require authentication
+// Route 1: create a user using: 'POST' --> /api/auth/createuser. Doesn't require authentication
 router.post(
   "/createuser",
+
+  // checks for creating user
   [
     body("name", "Please enter a valid name").isLength({ min: 3 }),
     body("email", "Please enter a valid email").isEmail(),
@@ -40,8 +45,8 @@ router.post(
       }
 
       // Generate a hash+salt  scure password
-      const salt = bcrypt.genSaltSync(10);
-      const securePsw = bcrypt.hashSync(req.body.password, salt);
+      const salt = await bcrypt.genSalt(10);
+      const securePsw = await bcrypt.hash(req.body.password, salt);
 
       // create new_user with unique email address
       user = await User.create({
@@ -55,16 +60,19 @@ router.post(
           id: user.id,
         },
       };
-      var authicationToken = jwt.sign(userData, JWT_SECRET);
+
+      // assign token to user
+      const authicationToken = jwt.sign(userData, JWT_SECRET);
       res.json({ authicationToken });
       //res.json(user);
     } catch (error) {
-      console.log(error);
+      console.error(error);
+      console.log("Internal server error");
     }
   }
 );
 
-// login a user using: 'POST' --> /api/auth/login. Doesn't login
+// Route 2: Authenticate a user using: 'POST' --> /api/auth/login. NOT login required
 router.post(
   "/login",
   [
@@ -73,12 +81,15 @@ router.post(
       min: 6,
     }),
   ],
+
   async (req, res) => {
     // if there are error, send bad request with an error
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
+
+    // getting email & psw from req.body using object Destructuring
     const { email, password } = req.body;
 
     try {
@@ -103,12 +114,28 @@ router.post(
           id: user.id,
         },
       };
-      var authicationToken = jwt.sign(payload, JWT_SECRET);
+
+      // assign token to user
+      const authicationToken = jwt.sign(payload, JWT_SECRET);
       res.json({ authicationToken });
     } catch (error) {
-      console.log(error);
+      console.error(error);
+      console.log("Internal server error");
     }
   }
 );
+
+// Route 3: Get loggedin user details using : 'POST' /api/auth/getuser --> login required
+router.post("/getuser", userDetail, async (req, res) => {
+  try {
+    // getting user id from req.body
+    const userId = req.user.id;
+    const userDetail = await User.findById(userId).select("-password");
+    res.send(userDetail);
+  } catch (error) {
+    console.error(error);
+    console.log("Internal server error");
+  }
+});
 
 module.exports = router;
